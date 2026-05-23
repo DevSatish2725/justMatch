@@ -3,10 +3,13 @@ const connectDB = require("./config/database");
 const User = require("./config/models/user");
 const { signupValidation } = require("./utils/validation");
 const bcrypt = require("bcrypt");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 
 app.use(express.json());
+app.use(cookieParser());
 app.post("/signup", async (req, res) => {
   // Creating a new instance of the User model
   try {
@@ -62,8 +65,11 @@ app.post("/login", async (req, res) => {
 
     if (!isPasswordValid) {
       throw new Error("Invalid credentials");
+    } else {
+      const token = jwt.sign({ _id: user._id }, "justMatch@2468");
+      res.cookie("token", token);
+      res.send("Login successfull");
     }
-    res.send("Login successfull");
   } catch (err) {
     res.status(400).send("Error: ", err.message);
   }
@@ -114,6 +120,25 @@ app.patch("/user/:userId", async (req, res) => {
     res.send("User updated successfully.");
   } catch (err) {
     res.status(400).send(err.message);
+  }
+});
+
+app.get("/profile", async (req, res) => {
+  try {
+    const cookie = req.cookies;
+    console.log("cookie", cookie);
+    const { token } = cookie;
+    const cookieValue = jwt.verify(token, "justMatch@2468");
+    console.log("cookie value", cookieValue);
+    const user = await User.findOne({ _id: cookieValue._id });
+    console.log("user", user);
+    if (user) {
+      res.send(user);
+    } else {
+      throw new Error("User not found");
+    }
+  } catch (err) {
+    res.status(401).send(err.message);
   }
 });
 
