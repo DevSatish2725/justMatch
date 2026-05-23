@@ -1,18 +1,71 @@
 const express = require("express");
 const connectDB = require("./config/database");
 const User = require("./config/models/user");
+const { signupValidation } = require("./utils/validation");
+const bcrypt = require("bcrypt");
 
 const app = express();
 
 app.use(express.json());
 app.post("/signup", async (req, res) => {
   // Creating a new instance of the User model
-  const user = new User(req.body);
   try {
+    const errors = signupValidation(req);
+    const {
+      firstName,
+      lastName,
+      emailId,
+      password,
+      gender,
+      age,
+      about,
+      photoUrl,
+      skills,
+    } = req.body;
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      firstName,
+      lastName,
+      emailId: emailId.toLowerCase().trim(),
+      password: passwordHash,
+      gender,
+      age,
+      about,
+      photoUrl,
+      skills,
+    });
+    if (Object.keys(errors).length) {
+      return res.status(400).json({
+        success: false,
+        errors,
+      });
+    }
     await user.save();
     res.send("User added successfully.");
   } catch (err) {
-    res.status(400).send("Error while adding user." + err.message);
+    res.status(400).send(err.message);
+  }
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    const { emailId, password } = req.body;
+    console.log("email id", emailId);
+    const convertToLowercase = emailId ? emailId.toLowerCase() : "";
+    const user = await User.findOne({ emailId: convertToLowercase });
+    if (!user) {
+      throw new Error("Invalid credentials");
+    }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      throw new Error("Invalid credentials");
+    }
+    res.send("Login successfull");
+  } catch (err) {
+    res.status(400).send("Error: ", err.message);
   }
 });
 
@@ -37,14 +90,30 @@ app.delete("/user", async (req, res) => {
   }
 });
 
-app.patch("/user", async (req, res) => {
-  const userId = req.body.userId;
-  const data = req.body;
+app.patch("/user/:userId", async (req, res) => {
   try {
-    await User.findByIdAndUpdate(userId, data);
+    const userId = req.params.userId;
+    const data = req.body;
+    const ALLOWED_UPDATES = [
+      "userId",
+      "firstName",
+      "lastName",
+      "skills",
+      "about",
+      "photoUrl",
+    ];
+    const isTrue = Object.keys(req.body).every((value) =>
+      ALLOWED_UPDATES.includes(value),
+    );
+    if (!isTrue) {
+      throw new Error("Email id can't update");
+    }
+    await User.findByIdAndUpdate(userId, data, {
+      runValidators: true,
+    });
     res.send("User updated successfully.");
   } catch (err) {
-    res.status(400).send("Error while updating an user.");
+    res.status(400).send(err.message);
   }
 });
 
