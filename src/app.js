@@ -5,6 +5,7 @@ const { signupValidation } = require("./utils/validation");
 const bcrypt = require("bcrypt");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
+const { userAuth } = require("./middlewares/user");
 
 const app = express();
 
@@ -55,19 +56,20 @@ app.post("/signup", async (req, res) => {
 app.post("/login", async (req, res) => {
   try {
     const { emailId, password } = req.body;
-    console.log("email id", emailId);
     const convertToLowercase = emailId ? emailId.toLowerCase() : "";
     const user = await User.findOne({ emailId: convertToLowercase });
     if (!user) {
       throw new Error("Invalid credentials");
     }
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await user.validatePassword(password);
 
     if (!isPasswordValid) {
       throw new Error("Invalid credentials");
     } else {
-      const token = jwt.sign({ _id: user._id }, "justMatch@2468");
-      res.cookie("token", token);
+      const token = user.getJWT();
+      res.cookie("token", token, {
+        expires: new Date(Date.now() + 8 * 3600000),
+      });
       res.send("Login successfull");
     }
   } catch (err) {
@@ -75,76 +77,11 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Feed API - GET/feed - get all the users from the database
-app.get("/feed", async (req, res) => {
+app.post("/sendconnectionrequest", userAuth, async (req, res) => {
   try {
-    const allUsers = await User.find({});
-    res.send(allUsers);
-  } catch (err) {
-    res.status(400).send("Error while fetching all users.");
-  }
-});
-
-// Delete a user from the database
-app.delete("/user", async (req, res) => {
-  try {
-    const userId = req.body.userId;
-    await User.findByIdAndDelete(userId);
-    res.send("User deleted successfully.");
-  } catch (err) {
-    res.status(400).send("Getting error while deleting a user.", err.message);
-  }
-});
-
-app.patch("/user/:userId", async (req, res) => {
-  try {
-    const userId = req.params.userId;
-    const data = req.body;
-    const ALLOWED_UPDATES = [
-      "userId",
-      "firstName",
-      "lastName",
-      "skills",
-      "about",
-      "photoUrl",
-    ];
-    const isTrue = Object.keys(req.body).every((value) =>
-      ALLOWED_UPDATES.includes(value),
-    );
-    if (!isTrue) {
-      throw new Error("Email id can't update");
-    }
-    await User.findByIdAndUpdate(userId, data, {
-      runValidators: true,
-    });
-    res.send("User updated successfully.");
-  } catch (err) {
-    res.status(400).send(err.message);
-  }
-});
-
-app.get("/profile", async (req, res) => {
-  try {
-    const cookie = req.cookies;
-    console.log("cookie", cookie);
-    const { token } = cookie;
-    const cookieValue = jwt.verify(token, "justMatch@2468");
-    console.log("cookie value", cookieValue);
-    const user = await User.findOne({ _id: cookieValue._id });
-    console.log("user", user);
-    if (user) {
-      res.send(user);
-    } else {
-      throw new Error("User not found");
-    }
+    res.send("Sending connection request...");
   } catch (err) {
     res.status(401).send(err.message);
-  }
-});
-
-app.use("/", (err, req, res, next) => {
-  if (err) {
-    res.status(500).send("Something went wrong.");
   }
 });
 
